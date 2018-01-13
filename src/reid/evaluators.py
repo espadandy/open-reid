@@ -10,7 +10,7 @@ from .utils.meters import AverageMeter
 
 
 def extract_features(model, data_loader, print_freq=1, metric=None):
-    model.eval()
+    model.eval()                                # what is this model.eval()
     batch_time = AverageMeter()
     data_time = AverageMeter()
 
@@ -18,10 +18,9 @@ def extract_features(model, data_loader, print_freq=1, metric=None):
     labels = OrderedDict()
 
     end = time.time()
-    for i, (imgs, fnames, pids, _) in enumerate(data_loader):
+    for i, (imgs, fnames, pids, _) in enumerate(data_loader):         # get image from data_loader.
         data_time.update(time.time() - end)
-
-        outputs = extract_cnn_feature(model, imgs)
+        outputs = extract_cnn_feature(model, imgs)                    # calculate features.
         for fname, output, pid in zip(fnames, outputs, pids):
             features[fname] = output
             labels[fname] = pid

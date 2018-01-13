@@ -10,7 +10,7 @@ def extract_cnn_feature(model, inputs, modules=None):
     model.eval()
     inputs = to_torch(inputs)
     inputs = Variable(inputs, volatile=True)
-    if modules is None:
+    if modules is None:                                     # evaluate the input with the model
         outputs = model(inputs)
         outputs = outputs.data.cpu()
         return outputs

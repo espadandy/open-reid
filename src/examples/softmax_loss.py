@@ -12,19 +12,17 @@ from torch.utils.data import DataLoader
 from reid import datasets
 from reid import models
 from reid.dist_metric import DistanceMetric
-from reid.loss import TripletLoss
 from reid.trainers import Trainer
 from reid.evaluators import Evaluator
 from reid.utils.data import transforms as T
 from reid.utils.data.preprocessor import Preprocessor
-from reid.utils.data.sampler import RandomIdentitySampler
 from reid.utils.logging import Logger
 from reid.utils.serialization import load_checkpoint, save_checkpoint
 
 
-def get_data(name, split_id, data_dir, height, width, batch_size, num_instances,
-             workers, combine_trainval):
-    root = osp.join(data_dir, name)
+def get_data(name, split_id, data_dir, height, width, batch_size, workers,
+             combine_trainval):
+    root = osp.join(data_dir, name) # get the directory.
 
     dataset = datasets.create(name, root, split_id=split_id)
 
@@ -52,8 +50,7 @@ def get_data(name, split_id, data_dir, height, width, batch_size, num_instances,
         Preprocessor(train_set, root=dataset.images_dir,
                      transform=train_transformer),
         batch_size=batch_size, num_workers=workers,
-        sampler=RandomIdentitySampler(train_set, num_instances),
-        pin_memory=True, drop_last=True)
+        shuffle=True, pin_memory=True, drop_last=True)
 
     val_loader = DataLoader(
         Preprocessor(dataset.val, root=dataset.images_dir,
@@ -71,34 +68,29 @@ def get_data(name, split_id, data_dir, height, width, batch_size, num_instances,
 
 
 def main(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)           # don't know what "seed" is.
+    torch.manual_seed(args.seed)        #
     cudnn.benchmark = True
 
     # Redirect print to both console and log file
     if not args.evaluate:
-        sys.stdout = Logger(osp.join(args.logs_dir, 'log.txt'))
+        sys.stdout = Logger(osp.join(args.logs_dir,'log.txt'))
 
     # Create data loaders
-    assert args.num_instances > 1, "num_instances should be greater than 1"
-    assert args.batch_size % args.num_instances == 0, \
-        'num_instances should divide batch_size'
     if args.height is None or args.width is None:
         args.height, args.width = (144, 56) if args.arch == 'inception' else \
                                   (256, 128)
     dataset, num_classes, train_loader, val_loader, test_loader = \
         get_data(args.dataset, args.split, args.data_dir, args.height,
-                 args.width, args.batch_size, args.num_instances, args.workers,
+                 args.width, args.batch_size, args.workers,
                  args.combine_trainval)
 
     # Create model
-    # Hacking here to let the classifier be the last feature embedding layer
-    # Net structure: avgpool -> FC(1024) -> FC(args.features)
-    model = models.create(args.arch, num_features=1024,
-                          dropout=args.dropout, num_classes=args.features)
+    model = models.create(args.arch, num_features=args.features,
+                          dropout=args.dropout, num_classes=num_classes)            # Get the model
 
     # Load from checkpoint
-    start_epoch = best_top1 = 0
+    start_epoch = best_top1 = 0                                                     # what is checkpoint?
     if args.resume:
         checkpoint = load_checkpoint(args.resume)
         model.load_state_dict(checkpoint['state_dict'])
@@ -106,35 +98,46 @@ def main(args):
         best_top1 = checkpoint['best_top1']
         print("=> Start epoch {}  best top1 {:.1%}"
               .format(start_epoch, best_top1))
-    model = nn.DataParallel(model).cuda()
+    model = nn.DataParallel(model).cuda()                                       # what does this change?
 
     # Distance metric
-    metric = DistanceMetric(algorithm=args.dist_metric)
+    metric = DistanceMetric(algorithm=args.dist_metric)                         # what is this metric used for?
 
     # Evaluator
-    evaluator = Evaluator(model)
+    evaluator = Evaluator(model)                                            # maybe there's something useful in Evaluator()
     if args.evaluate:
         metric.train(model, train_loader)
         print("Validation:")
         evaluator.evaluate(val_loader, dataset.val, dataset.val, metric)
         print("Test:")
-        evaluator.evaluate(test_loader, dataset.query, dataset.gallery, metric)
+        evaluator.evaluate(test_loader, dataset.query, dataset.gallery, metric)          # here is the query
         return
 
     # Criterion
-    criterion = TripletLoss(margin=args.margin).cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
-                                 weight_decay=args.weight_decay)
+    if hasattr(model.module, 'base'):
+        base_param_ids = set(map(id, model.module.base.parameters()))
+        new_params = [p for p in model.parameters() if
+                      id(p) not in base_param_ids]
+        param_groups = [
+            {'params': model.module.base.parameters(), 'lr_mult': 0.1},
+            {'params': new_params, 'lr_mult': 1.0}]
+    else:
+        param_groups = model.parameters()
+    optimizer = torch.optim.SGD(param_groups, lr=args.lr,                       # optimizer: use torch.optim.SGD()
+                                momentum=args.momentum,
+                                weight_decay=args.weight_decay,
+                                nesterov=True)
 
     # Trainer
     trainer = Trainer(model, criterion)
 
     # Schedule learning rate
     def adjust_lr(epoch):
-        lr = args.lr if epoch <= 100 else \
-            args.lr * (0.001 ** ((epoch - 100) / 50.0))
+        step_size = 60 if args.arch == 'inception' else 40
+        lr = args.lr * (0.1 ** (epoch // step_size))
         for g in optimizer.param_groups:
             g['lr'] = lr * g.get('lr_mult', 1)
 
@@ -152,21 +155,24 @@ def main(args):
             'state_dict': model.module.state_dict(),
             'epoch': epoch + 1,
             'best_top1': best_top1,
-        }, is_best, fpath=osp.join(args.logs_dir, 'checkpoint.pth.tar'))
+        }, is_best, fpath=osp.join(args.logs_dir, args.dataset, args.arch, 'checkpoint.pth.tar'))
 
         print('\n * Finished epoch {:3d}  top1: {:5.1%}  best: {:5.1%}{}\n'.
               format(epoch, top1, best_top1, ' *' if is_best else ''))
 
     # Final test
     print('Test with best model:')
-    checkpoint = load_checkpoint(osp.join(args.logs_dir, 'model_best.pth.tar'))
+    checkpoint = load_checkpoint(osp.join(args.logs_dir, args.dataset, args.arch, 'model_best.pth.tar'))
     model.module.load_state_dict(checkpoint['state_dict'])
     metric.train(model, train_loader)
     evaluator.evaluate(test_loader, dataset.query, dataset.gallery, metric)
 
+    # Save the model
+    #torch.save(model.state_dict(), '/home/yicong/open-reid/examples/model/model1.pt')
+
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Triplet loss classification")
+    parser = argparse.ArgumentParser(description="Softmax loss classification")
     # data
     parser.add_argument('-d', '--dataset', type=str, default='cuhk03',
                         choices=datasets.names())
@@ -182,28 +188,22 @@ if __name__ == '__main__':
     parser.add_argument('--combine-trainval', action='store_true',
                         help="train and val sets together for training, "
                              "val set alone for validation")
-    parser.add_argument('--num-instances', type=int, default=4,
-                        help="each minibatch consist of "
-                             "(batch_size // num_instances) identities, and "
-                             "each identity has num_instances instances, "
-                             "default: 4")
     # model
     parser.add_argument('-a', '--arch', type=str, default='resnet50',
                         choices=models.names())
     parser.add_argument('--features', type=int, default=128)
-    parser.add_argument('--dropout', type=float, default=0)
-    # loss
-    parser.add_argument('--margin', type=float, default=0.5,
-                        help="margin of the triplet loss, default: 0.5")
+    parser.add_argument('--dropout', type=float, default=0.5)
     # optimizer
-    parser.add_argument('--lr', type=float, default=0.0002,
-                        help="learning rate of all parameters")
+    parser.add_argument('--lr', type=float, default=0.1,
+                        help="learning rate of new parameters, for pretrained "
+                             "parameters it is 10 times smaller than this")
+    parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight-decay', type=float, default=5e-4)
     # training configs
     parser.add_argument('--resume', type=str, default='', metavar='PATH')
     parser.add_argument('--evaluate', action='store_true',
                         help="evaluation only")
-    parser.add_argument('--epochs', type=int, default=150)
+    parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--start_save', type=int, default=0,
                         help="start saving checkpoints after specific epoch")
     parser.add_argument('--seed', type=int, default=1)
@@ -212,9 +212,11 @@ if __name__ == '__main__':
     parser.add_argument('--dist-metric', type=str, default='euclidean',
                         choices=['euclidean', 'kissme'])
     # misc
-    working_dir = osp.dirname(osp.abspath(__file__))
+    #working_dir = osp.dirname(osp.abspath(__file__))
+    working_dir = '/home/yicong/open_reid/'
     parser.add_argument('--data-dir', type=str, metavar='PATH',
-                        default=osp.join(working_dir, 'data'))
+                        default=osp.join(working_dir, 'data/'))
     parser.add_argument('--logs-dir', type=str, metavar='PATH',
-                        default=osp.join(working_dir, 'logs'))
+                        default=osp.join(working_dir, 'logs/softmax_loss/'))
+
     main(parser.parse_args())
