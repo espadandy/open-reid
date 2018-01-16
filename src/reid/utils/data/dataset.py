@@ -9,17 +9,20 @@ from ..serialization import read_json
 def _pluck(identities, indices, relabel=False):
     ret = []
     for index, pid in enumerate(indices):
-        pid_images = identities[str(pid)]
-        for camid, cam_images in enumerate(pid_images):
-            for fname in cam_images:
-                name = osp.splitext(fname)[0]
+        pid_images = identities[str(pid)]   # pid_images: a list of list of image names
+        for camid, cam_images in enumerate(pid_images): # cam_images: a list of image names
+            for fname in cam_images:    # fname: e.g."00000005_00_0003.jpg"
+                name = osp.splitext(fname)[0]   # name without .jpg, e.g.00000005_00_0003
+
                 x, y, _ = map(int, name.split('_'))
+                # x: person id, e.g. 5, y: camera id, e.g. 1
+
                 assert pid == x and camid == y
                 if relabel:
-                    ret.append((fname, index, camid))
+                    ret.append((fname, index, camid))   #
                 else:
                     ret.append((fname, pid, camid))
-    return ret
+    return ret  # this is what dataset[i] return
 
 
 class Dataset(object):
@@ -42,6 +45,7 @@ class Dataset(object):
             raise ValueError("split_id exceeds total splits {}"
                              .format(len(splits)))
         self.split = splits[self.split_id]
+        # self.split is a list of dictionaries, this is 1st of the 20 dicts whose keys are 'query','gallery', 'trainval'
 
         # Randomly split train / val
         trainval_pids = np.asarray(self.split['trainval'])
@@ -52,8 +56,8 @@ class Dataset(object):
         if num_val >= num or num_val < 0:
             raise ValueError("num_val exceeds total identities {}"
                              .format(num))
-        train_pids = sorted(trainval_pids[:-num_val])
-        val_pids = sorted(trainval_pids[-num_val:])
+        train_pids = sorted(trainval_pids[:-num_val])   # train 70% of the data chosen randomly
+        val_pids = sorted(trainval_pids[-num_val:])     # train 30% of the data chosen randomly
 
         self.meta = read_json(osp.join(self.root, 'meta.json'))
         identities = self.meta['identities']

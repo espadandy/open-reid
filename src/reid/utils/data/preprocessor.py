@@ -20,11 +20,11 @@ class Preprocessor(object):
         return self._get_single_item(indices)
 
     def _get_single_item(self, index):
-        fname, pid, camid = self.dataset[index]
+        fname, pid, camid = self.dataset[index] # pid is not real in train and val, true in gallery and query
         fpath = fname
         if self.root is not None:
             fpath = osp.join(self.root, fname)
         img = Image.open(fpath).convert('RGB')
         if self.transform is not None:
             img = self.transform(img)
-        return img, fname, pid, camid
+        return img, fname, pid, camid   # this is what data loader return. This 'pid' may be index from zero instead of pid

@@ -24,10 +24,10 @@ class BaseTrainer(object):
         precisions = AverageMeter()
 
         end = time.time()
-        for i, inputs in enumerate(data_loader):
+        for i, inputs in enumerate(data_loader):    # inputs: one 4-elements list
             data_time.update(time.time() - end)
 
-            inputs, targets = self._parse_data(inputs)
+            inputs, targets = self._parse_data(inputs)  # inputs: images, targets: index from 0
             loss, prec1 = self._forward(inputs, targets)
 
             losses.update(loss.data[0], targets.size(0))
