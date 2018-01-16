@@ -9,7 +9,7 @@ from ..serialization import read_json
 def _pluck(identities, indices, relabel=False):
     ret = []
     for index, pid in enumerate(indices):
-        pid_images = identities[pid]
+        pid_images = identities[str(pid)]
         for camid, cam_images in enumerate(pid_images):
             for fname in cam_images:
                 name = osp.splitext(fname)[0]

@@ -57,7 +57,8 @@ class Market1501(Dataset):
         mkdir_if_missing(images_dir)
 
         # 1501 identities (+1 for background) with 6 camera views each
-        identities = [[[] for _ in range(6)] for _ in range(1502)]
+        #identities = [[[] for _ in range(6)] for _ in range(1502)] # modified
+        identities = {i:[[] for _ in range(6)] for i in range(10000, 11502)}
 
         def register(subdir, pattern=re.compile(r'([-\d]+)_c(\d)')):
             fpaths = sorted(glob(osp.join(exdir, subdir, '*.jpg')))
@@ -69,10 +70,11 @@ class Market1501(Dataset):
                 assert 0 <= pid <= 1501  # pid == 0 means background
                 assert 1 <= cam <= 6
                 cam -= 1
+                pid += 10000 # modified
                 pids.add(pid)
                 fname = ('{:08d}_{:02d}_{:04d}.jpg'
-                         .format(pid, cam, len(identities[pid][cam])))
-                identities[pid][cam].append(fname)
+                         .format(pid, cam,len(identities[pid][cam])))    # modified
+                identities[pid][cam].append(fname)    # modified
                 shutil.copy(fpath, osp.join(images_dir, fname))
             return pids
 

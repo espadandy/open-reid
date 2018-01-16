@@ -69,7 +69,7 @@ class CUHK03(Dataset):
                 imsave(osp.join(images_dir, fname), img)
                 fnames.append(fname)
 
-        identities = []
+        identities = {}
         for labeled, detected in zip(
                 matdata['labeled'][0], matdata['detected'][0]):
             labeled, detected = deref(labeled), deref(detected)
@@ -81,7 +81,7 @@ class CUHK03(Dataset):
                 dump_(detected[i, :5], pid, 0, images[0])
                 dump_(labeled[i, 5:], pid, 1, images[1])
                 dump_(detected[i, 5:], pid, 1, images[1])
-                identities.append(images)
+                identities[pid] = images
 
         # Save meta information into a json file
         meta = {'name': 'cuhk03', 'shot': 'multiple', 'num_cameras': 2,
