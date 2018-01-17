@@ -6,6 +6,7 @@ import numpy as np
 from ..serialization import read_json
 
 
+# identities: a dict, key is pid, a list of lists of the pid under certain camid
 def _pluck(identities, indices, relabel=False):
     ret = []
     for index, pid in enumerate(indices):

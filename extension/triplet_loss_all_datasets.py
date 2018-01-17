@@ -194,9 +194,6 @@ def main(args):
         g += d.gallery
     evaluator.evaluate(test_loader, q, g, metric)           # modified
 
-    # Save the model
-    #torch.save(model.state_dict(), '/home/yicong/open-reid/examples/model/triplet_loss_model.pt')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Triplet loss classification")
