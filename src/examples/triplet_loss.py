@@ -53,19 +53,19 @@ def get_data(name, split_id, data_dir, height, width, batch_size, num_instances,
                      transform=train_transformer),
         batch_size=batch_size, num_workers=workers,
         sampler=RandomIdentitySampler(train_set, num_instances),
-        pin_memory=True, drop_last=True)
+        pin_memory=False, drop_last=True)
 
     val_loader = DataLoader(
         Preprocessor(dataset.val, root=dataset.images_dir,
                      transform=test_transformer),
         batch_size=batch_size, num_workers=workers,
-        shuffle=False, pin_memory=True)
+        shuffle=False, pin_memory=False)
 
     test_loader = DataLoader(
         Preprocessor(list(set(dataset.query) | set(dataset.gallery)),
                      root=dataset.images_dir, transform=test_transformer),
         batch_size=batch_size, num_workers=workers,
-        shuffle=False, pin_memory=True)
+        shuffle=False, pin_memory=False)
 
     return dataset, num_classes, train_loader, val_loader, test_loader
 
@@ -108,7 +108,7 @@ def main(args):
         best_top1 = checkpoint['best_top1']
         print("=> Start epoch {}  best top1 {:.1%}"
               .format(start_epoch, best_top1))
-    model = nn.DataParallel(model).cuda()
+    model = nn.DataParallel(model)#.cuda()
 
     # Distance metric
     metric = DistanceMetric(algorithm=args.dist_metric)
@@ -124,7 +124,7 @@ def main(args):
         return
 
     # Criterion
-    criterion = TripletLoss(margin=args.margin).cuda()
+    criterion = TripletLoss(margin=args.margin)#.cuda()
 
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
@@ -219,7 +219,8 @@ if __name__ == '__main__':
                         choices=['euclidean', 'kissme'])
     # misc
     #working_dir = osp.dirname(osp.abspath(__file__))
-    working_dir = '/home/yicong/open_reid/'
+    #working_dir = '/home/yicong/open_reid/'
+    working_dir = '/Users/andy/Programs/open_reid/'
     parser.add_argument('--data-dir', type=str, metavar='PATH',
                         default=osp.join(working_dir, 'data/'))
     parser.add_argument('--logs-dir', type=str, metavar='PATH',
